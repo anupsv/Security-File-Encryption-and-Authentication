@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import os, sys, os.path
 from optparse import OptionParser
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -26,52 +29,49 @@ class pycrypt:
 
 
 
-    def encrypt_and_HMAC_data(self):
+    def encrypt_data(self):
         self.setup_encrypter_env()
         encryptor = self.encrypter_cipher.encryptor()
-        ct = encryptor.update(self.msg_data) + encryptor.finalize()
+        encrypted_data = encryptor.update(self.msg_data) + encryptor.finalize()
         tag = encryptor.tag
 
         print "-" * 50
         print "Encrypted Tag (GCM Auth) len: ", len(tag)
 
         print "-" * 50
-        print "Length of Encrypted Msg Data : ", len(ct)
+        print "Length of Encrypted Msg Data : ", len(encrypted_data)
 
-        msg = tag+ct
-        print len(msg)
-
-        #return bytess + ct
-        rsaenc = self.RSA_encrypt(msg)
+        rsaenc = self.RSA_encrypt(self.iv+tag)
         sig = self.generate_Signature(rsaenc)
         print "-" * 50
-        #print "SIG : ",sig
         print "Signature len : ", len(sig)
         print "IV len : " , len(self.iv)
         print "Tag len : ", len(tag)
+        print "RSA Enc Length : ", len(rsaenc)
         print "-" * 50
 
-
-        return self.iv+sig+rsaenc
+        # RSA( IV + Tag ) + Encrypted Data
+        return sig+rsaenc+encrypted_data
         # self.decrypt_data(ct)
 
 
 
     def decrypt_data(self, alldata):
 
-        iv = alldata[:self.gcm_iv]
-        sig = alldata[self.gcm_iv:256+self.gcm_iv]
+        sig = alldata[:256]
+        rsaenc = alldata[256:512]
+        encrypted_data = alldata[512:]
         print len(sig)
 
-        encrypted_data = alldata[256+self.gcm_iv:]
-        ct = self.RSA_decrypt(encrypted_data)
-        tag = ct[:16]
+        iv_tag = self.RSA_decrypt(rsaenc)
+        iv = iv_tag[:self.gcm_iv]
+        tag = iv_tag[self.gcm_iv:]
 
         print "TAG LEN : ", len(tag)
         print "IV LEN : ", len(iv)
 
         try:
-            self.verify_signature(sig,encrypted_data)
+            self.verify_signature(sig,rsaenc)
             print "Signature verified."
         except:
             print "Signature verification failed."
@@ -79,12 +79,12 @@ class pycrypt:
 
         self.setup_decrypter_env(tag,iv)
         decryptor = self.decrypter_cipher.decryptor()
-        msg = decryptor.update(ct[16:]) + decryptor.finalize()
-        print "-"*50
-        print msg
-        print "-" * 50
-        with open(self.output_file,"w+") as f:
-            f.write(msg)
+        msg = decryptor.update(encrypted_data) + decryptor.finalize()
+        # print "-"*50
+        # print msg
+        # print "-" * 50
+        return msg
+
 
 
     def setup_encrypter_env(self):
@@ -155,27 +155,41 @@ class pycrypt:
 
 
     def encrypt_and_write(self):
-        self.encrypt_and_HMAC_data()
+        print "Encrypting...."
+        data = self.encrypt_data()
+
+        with open(self.output_file,"w+") as f:
+            f.write(data)
+
+    def decrypt_and_write(self):
+        print "Decrypting...."
+        alldata = open(self.plain_or_crypt_data_path,"r").read()
+
+        data = self.decrypt_data(alldata)
+
+        with open(self.output_file, "w+") as f:
+            f.write(data)
 
 
 def main():
     py = pycrypt("./public_key", "./private_key", "./data.txt", "./output")
-    ct = py.encrypt_and_HMAC_data()
+    ct = py.encrypt_data()
     py.decrypt_data(ct)
 
 
 if __name__ == "__main__":
-    main()
-    sys.exit()
+
     bashOptParser = OptionParser()
     bashOptParser.add_option("-d", dest="decrypt", help="Please enter file path to private key", default=False)
     bashOptParser.add_option("-e", dest='encrypt', help="Please enter file path to public key", default=False)
     (options, args) = bashOptParser.parse_args()
-    if options["encrypt"]:
-        pycrypter = pycrypt(options["encrypt"], args[0], args[1], args[2])
+
+    if options.encrypt:
+        pycrypter = pycrypt(options.encrypt, args[0], args[1], args[2])
         pycrypter.encrypt_and_write()
-    elif options["decrypt"]:
-        pycrypter = pycrypt(args[0],options["encrypt"], args[1], args[2])
+    elif options.decrypt:
+        pycrypter = pycrypt(args[0],options.decrypt, args[1], args[2])
+        pycrypter.decrypt_and_write()
 
     print options, args
     #main()
