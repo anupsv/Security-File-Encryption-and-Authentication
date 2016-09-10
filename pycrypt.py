@@ -25,8 +25,6 @@ class pycrypt:
 
         self.msg_data = open(self.plain_or_crypt_data_path, "r").read()
         self.msg_data = bytes(bytearray(self.msg_data))
-        print "self.msg_data : ", type(self.msg_data), len(self.msg_data)
-
 
 
     def encrypt_data(self):
@@ -37,15 +35,17 @@ class pycrypt:
 
         print "-" * 50
         print "Encrypted Tag (GCM Auth) len: ", len(tag)
+        print "-" * 50
 
         print "-" * 50
         print "Length of Encrypted Msg Data : ", len(encrypted_data)
+        print "-" * 50
 
         rsaenc = self.RSA_encrypt(self.iv+tag)
         sig = self.generate_Signature(rsaenc)
         print "-" * 50
         print "Signature len : ", len(sig)
-        print "IV len : " , len(self.iv)
+        print "IV len : ", len(self.iv)
         print "Tag len : ", len(tag)
         print "RSA Enc Length : ", len(rsaenc)
         print "-" * 50
@@ -61,14 +61,15 @@ class pycrypt:
         sig = alldata[:256]
         rsaenc = alldata[256:512]
         encrypted_data = alldata[512:]
-        print len(sig)
 
         iv_tag = self.RSA_decrypt(rsaenc)
         iv = iv_tag[:self.gcm_iv]
         tag = iv_tag[self.gcm_iv:]
 
+        print "-" * 50
         print "TAG LEN : ", len(tag)
         print "IV LEN : ", len(iv)
+        print "-" * 50
 
         try:
             self.verify_signature(sig,rsaenc)
@@ -76,6 +77,7 @@ class pycrypt:
         except:
             print "Signature verification failed."
             sys.exit()
+        print "-" * 50
 
         self.setup_decrypter_env(tag,iv)
         decryptor = self.decrypter_cipher.decryptor()
@@ -155,11 +157,16 @@ class pycrypt:
 
 
     def encrypt_and_write(self):
+        print "-"*50
         print "Encrypting...."
         data = self.encrypt_data()
 
+        print "-" * 50
+        print "Writing to file : ",self.output_file
         with open(self.output_file,"w+") as f:
             f.write(data)
+
+        print "*" * 50
 
     def decrypt_and_write(self):
         print "Decrypting...."
