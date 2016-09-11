@@ -41,7 +41,7 @@ class pycrypt:
         print "Length of Encrypted Msg Data : ", len(encrypted_data)
         print "-" * 50
 
-        rsaenc = self.RSA_encrypt(self.iv+tag)
+        rsaenc = self.RSA_encrypt(self.aes_key+self.iv+tag)
         sig = self.generate_Signature(rsaenc)
         print "-" * 50
         print "Signature len : ", len(sig)
@@ -63,6 +63,8 @@ class pycrypt:
         encrypted_data = alldata[512:]
 
         iv_tag = self.RSA_decrypt(rsaenc)
+        self.aes_key = iv_tag[:32]
+        iv_tag = iv_tag[32:]
         iv = iv_tag[:self.gcm_iv]
         tag = iv_tag[self.gcm_iv:]
 
@@ -91,24 +93,13 @@ class pycrypt:
 
     def setup_encrypter_env(self):
 
-        if not os.path.isfile("./aes_key"):
-            key = os.urandom(32)
-            open("./aes_key", "wb+").write(key)
-        else:
-            key = "".join(open("./aes_key", "rb").readlines())
+        self.aes_key = key = os.urandom(32)
         self.iv = os.urandom(self.gcm_iv)
         self.encrypter_cipher = Cipher(algorithms.AES(key), modes.GCM(self.iv), backend=default_backend())
 
 
     def setup_decrypter_env(self,tag,iv):
-
-        if not os.path.isfile("./aes_key"):
-            key = os.urandom(32)
-            open("./aes_key", "wb+").write(key)
-        else:
-            key = "".join(open("./aes_key", "rb").readlines())
-
-        self.decrypter_cipher = Cipher(algorithms.AES(key), modes.GCM(iv,tag), backend=default_backend())
+        self.decrypter_cipher = Cipher(algorithms.AES(self.aes_key), modes.GCM(iv,tag), backend=default_backend())
 
 
     def load_private_key(self):
