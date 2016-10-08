@@ -24,7 +24,7 @@ class pycrypt:
         self.get_key_length()
         self.load_keys()
         self.read_input_file()
-        self.gcm_iv = 64
+        self.gcm_iv = 256
         self.file_attachment_path = email_attachment
         self.fileInfo = {}
 
@@ -33,11 +33,20 @@ class pycrypt:
         self.msg_data = open(self.plain_or_crypt_data_path, "r").read()
         self.msg_data = bytes(bytearray(self.msg_data))
 
+    def hash_data(self, data):
+
+        digest = hashes.Hash(hashes.SHA512(), backend=default_backend())
+        digest.update(data)
+        msg_digest = digest.finalize()
+        return msg_digest
+
     def new_encrypt_data(self):
         self.setup_encrypter_env()
+
         encryptor = self.encrypter_cipher.encryptor()
-        self.prepare_msgData_with_attachment()
-        sig = self.generate_Signature(self.msg_data)
+        self.prepare_msg_data_with_attachment()
+        hash_of_msg = self.hash_data(self.msg_data)
+        sig = self.generate_signature(hash_of_msg)
 
         encrypted_data = encryptor.update(sig + self.msg_data) + encryptor.finalize()
         tag = encryptor.tag
@@ -50,7 +59,7 @@ class pycrypt:
         print "Length of Encrypted Msg Data : ", len(encrypted_data)
         print "-" * 50
 
-        rsaenc = self.RSA_encrypt(self.aes_key)
+        rsaenc = self.rsa_encrypt(self.aes_key)
 
         print "-" * 50
         print "Signature len : ", len(sig)
@@ -60,6 +69,7 @@ class pycrypt:
         print "Tag len : ", len(tag)
         print "RSA Enc Length : ", len(rsaenc)
         print "AES Key : ", base64.encodestring(self.aes_key)
+        print "AES Key Len : ", len(self.aes_key)
         print "-" * 50
 
         # RSA( IV + Tag ) + Encrypted Data
@@ -75,10 +85,15 @@ class pycrypt:
         rsaenc = alldata[self.gcm_iv + 16:self.gcm_iv + 16 + self.signature_length]
         encrypted_data = alldata[self.gcm_iv + 16 + self.signature_length:]
 
-        self.aes_key = self.RSA_decrypt(rsaenc)
+        print base64.encodestring(iv)
+        print 50 * "-"
+        print base64.encodestring(tag)
+
+        self.aes_key = self.rsa_decrypt(rsaenc)
         # print base64.encodestring(aes_key)
 
         self.setup_decrypter_env(tag, iv)
+
         decryptor = self.decrypter_cipher.decryptor()
         sig_msg = decryptor.update(encrypted_data) + decryptor.finalize()
 
@@ -86,7 +101,7 @@ class pycrypt:
         msg = sig_msg[self.signature_length:]
 
         try:
-            self.verify_signature(sig, msg)
+            self.verify_signature(sig, self.hash_data(msg))
             print "Signature verified."
         except:
             print "Signature verification failed."
@@ -108,33 +123,49 @@ class pycrypt:
 
     def setup_encrypter_env(self):
 
-        self.aes_key = key = os.urandom(32)
         self.iv = os.urandom(self.gcm_iv)
-        self.encrypter_cipher = Cipher(algorithms.AES(key), modes.GCM(self.iv), backend=default_backend())
+        self.encrypter_cipher = Cipher(algorithms.AES(self.aes_key), modes.GCM(self.iv), backend=default_backend())
 
     def setup_decrypter_env(self, tag, iv):
         self.decrypter_cipher = Cipher(algorithms.AES(self.aes_key), modes.GCM(iv, tag), backend=default_backend())
 
     def load_private_key(self):
         with open(self.priv_key_path, "rb") as key_file:
-            return serialization.load_pem_private_key(key_file.read(), password=None, backend=default_backend())
+            try:
+                return serialization.load_pem_private_key(key_file.read(), password=None, backend=default_backend())
+            except:
+                print "Could not load the pem private key file. Please Check."
+                sys.exit()
 
     def load_public_key(self):
         with open(self.pub_key_path, "rb") as key_file:
-            return serialization.load_pem_public_key(key_file.read(), backend=default_backend())
+            try:
+                return serialization.load_pem_public_key(key_file.read(), backend=default_backend())
+            except:
+                print "Could not load the pem public key file. Please Check."
+                sys.exit()
 
-    def RSA_encrypt(self, msg):
+    def rsa_encrypt(self, msg):
+        try:
+            ciphertext = self.public_key.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA512()),
+                                                                   algorithm=hashes.SHA512(), label=None))
+        except:
+            print "Could not encrypt the data."
+            sys.exit()
 
-        ciphertext = self.public_key.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA1()),
-                                                               algorithm=hashes.SHA1(), label=None))
         print "-" * 50
         print "RSA ENCRYPTED : ", len(ciphertext)
         print "-" * 50
         return ciphertext
 
-    def RSA_decrypt(self, ciphertext):
-        plaintext = self.private_key.decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA1()),
-                                                                      algorithm=hashes.SHA1(), label=None))
+    def rsa_decrypt(self, ciphertext):
+        try:
+            plaintext = self.private_key.decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA512()),
+                                                                          algorithm=hashes.SHA512(), label=None))
+        except:
+            print "Could not decrypt the data."
+            sys.exit()
+
         print "-" * 50
         print "RSA DECRYPTION : ", len(plaintext)
         return plaintext
@@ -143,16 +174,21 @@ class pycrypt:
         self.public_key = self.load_public_key()
         self.private_key = self.load_private_key()
 
-    def generate_Signature(self, msg):
-        signer = self.private_key.signer(
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+    def generate_signature(self, msg):
+        try:
+            signer = self.private_key.signer(
+                padding.PSS(mgf=padding.MGF1(hashes.SHA512()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA512())
+        except:
+            print "Could not create signature for given data."
+            sys.exit()
+
         signer.update(msg)
         sig = signer.finalize()
         return sig
 
     def verify_signature(self, sig, msg):
-        verifier = self.public_key.verifier(sig, padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                             salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
+        verifier = self.public_key.verifier(sig, padding.PSS(mgf=padding.MGF1(hashes.SHA512()),
+                                                             salt_length=padding.PSS.MAX_LENGTH), hashes.SHA512())
         verifier.update(msg)
         verifier.verify()
 
@@ -206,36 +242,45 @@ class pycrypt:
         with open(self.file_attachment_path, 'r') as myfile:
             self.fileInfo["filedata"] = myfile.read()
 
-    def prepare_msgData_with_attachment(self):
-        dictstring = json.dumps(self.fileInfo)
-
+    def prepare_msg_data_with_attachment(self):
+        dictstring = json.dumps(self.fileInfo, encoding='utf-8')
         self.msg_data = self.msg_data + "\r\n\r\n" + dictstring
 
     def verify_file_exists(self):
 
-        pass
+        if not os.path.exists(self.pub_key_path):
+            print "Public Key file not found : {}".format(self.pub_key_path)
+            sys.exit()
+        elif not os.path.exists(self.priv_key_path):
+            print "Private Key file not found : {}".format(self.priv_key_path)
+            sys.exit()
+        elif not os.path.exists(self.plain_or_crypt_data_path):
+            print "File to be encrypted not found : {}".format(self.plain_or_crypt_data_path)
+            sys.exit()
+
+
 
     def get_key_length(self):
 
         data = subprocess.Popen('openssl rsa -in {} -text -noout | grep " bit"'.format(self.priv_key_path), shell=True,
                                 stdout=subprocess.PIPE).stdout.read()
-        if "2048" in data:
+        if "1024" in data:
+            self.key_size = 1024
+            self.signature_length = 128
+            self.aes_key = os.urandom(32)
+        elif "2048" in data:
             self.key_size = 2048
             self.signature_length = 256
+            self.aes_key = os.urandom(32)
         elif "4096" in data:
             self.key_size = 4096
             self.signature_length = 512
+            self.aes_key = os.urandom(32)
         else:
-            print "{} is not supported. Either you are using a weak key or something so strong that we don't " \
-                  "really have a need for that.".format(data)
+            print "The file {} is not supported. Either you are using a weak key or something so strong that we don't " \
+                  "really have a need for that or some other file instead of a key.".format(data)
 
             # sys.exit()
-
-
-def main():
-    py = pycrypt("./public_key", "./private_key", "./data.txt", "./output")
-    ct = py.encrypt_data()
-    py.decrypt_data(ct)
 
 
 if __name__ == "__main__":
@@ -253,5 +298,5 @@ if __name__ == "__main__":
         pycrypter = pycrypt(args[0], options.decrypt, args[1], args[2], options.filepath)
         pycrypter.decrypt_and_write()
 
-    print options, args
+    # print options, args
     # main()
