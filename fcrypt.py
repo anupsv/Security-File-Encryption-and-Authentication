@@ -12,7 +12,6 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 
 class pycrypt:
-
     # initializes the various environments needed for encryption and decryption
     # does checks on file etc.
     def __init__(self, pub_key_path, priv_key_path, plain_or_crypt_data_path, output_file, email_attachment,
@@ -39,7 +38,7 @@ class pycrypt:
         self.msg_data = open(self.plain_or_crypt_data_path, "r").read()
         self.msg_data = bytes(bytearray(self.msg_data))
 
-    # this function computes hash of a given data using SHA512 hashing algorithm and returns the output.
+    # this function computes hash of a given data using SHA256 hashing algorithm and returns the output.
     def hash_data(self, data):
         digest = hashes.Hash(hashes.SHA512(), backend=default_backend())
         digest.update(data)
@@ -105,7 +104,7 @@ class pycrypt:
         print "-" * 50
         split_msg = msg.split("\r\n\r\n\r\n\r\n")
 
-        if len(split_msg[1]) > 2:
+        if len(split_msg) == 2:
             print "Attachment Detected."
             filename = split_msg[1].split("\r\r\n")[0]
             filedata = split_msg[1].split("\r\r\n")[1]
@@ -153,9 +152,10 @@ class pycrypt:
 
     # this function performs the RSA encryption given the data (usually the symmetric key) to be encrypted.
     def rsa_encrypt(self, msg):
+
         try:
-            ciphertext = self.public_key.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA512()),
-                                                                   algorithm=hashes.SHA512(), label=None))
+            ciphertext = self.public_key.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                                                   algorithm=hashes.SHA256(), label=None))
         except:
             print "Could not encrypt the data."
             sys.exit()
@@ -165,8 +165,8 @@ class pycrypt:
     # this function does rsa decryption given the cipher text.
     def rsa_decrypt(self, ciphertext):
         try:
-            plaintext = self.private_key.decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA512()),
-                                                                          algorithm=hashes.SHA512(), label=None))
+            plaintext = self.private_key.decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                                                          algorithm=hashes.SHA256(), label=None))
         except:
             print "-" * 50
             print "Could not decrypt the data."
@@ -183,7 +183,7 @@ class pycrypt:
     def generate_signature(self, msg):
         try:
             signer = self.private_key.signer(
-                padding.PSS(mgf=padding.MGF1(hashes.SHA512()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA512())
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
         except:
             print "Could not create signature for given data."
             sys.exit()
@@ -194,8 +194,8 @@ class pycrypt:
 
     # once a public key is loaded, this function is used to verify the signature on the data it was signed.
     def verify_signature(self, sig, msg):
-        verifier = self.public_key.verifier(sig, padding.PSS(mgf=padding.MGF1(hashes.SHA512()),
-                                                             salt_length=padding.PSS.MAX_LENGTH), hashes.SHA512())
+        verifier = self.public_key.verifier(sig, padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
+                                                             salt_length=padding.PSS.MAX_LENGTH), hashes.SHA256())
         verifier.update(msg)
         verifier.verify()
 
@@ -204,7 +204,6 @@ class pycrypt:
     def encrypt_and_write(self):
 
         if self.file_attachment_path:
-
             print "---" * 50
             print "Attachment Detected"
             print "Doing checks on file : ", self.file_attachment_path
@@ -290,10 +289,11 @@ class pycrypt:
             self.fileInfo["filedata"] = myfile.read()
 
     def prepare_msg_data_with_attachment(self):
-        dictstring = ""
-        dictstring += self.fileInfo["filename"] + "\r\r\n"
-        dictstring += self.fileInfo["filedata"]
-        self.msg_data = self.msg_data + "\r\n\r\n\r\n\r\n" + dictstring
+        if self.file_attachment_path:
+            dictstring = ""
+            dictstring += self.fileInfo["filename"] + "\r\r\n"
+            dictstring += self.fileInfo["filedata"]
+            self.msg_data = self.msg_data + "\r\n\r\n\r\n\r\n" + dictstring
 
     # This function verifies if the given key files exist or not. Throws error and exists gracefully if not found.
     def verify_file_exists(self):
@@ -319,15 +319,14 @@ class pycrypt:
             self.rsaenc_length = self.public_key.key_size / 8
 
             if self.signature_length % 2 != 0 and self.signature_length > 0:
-                print "Looks like there's something wrong with the private key. The length of the key found is : {}".\
+                print "Looks like there's something wrong with the private key. The length of the key found is : {}". \
                     format(self.signature_length * 8)
                 sys.exit()
 
             if self.rsaenc_length % 2 != 0 and self.rsaenc_length > 0:
-                print "Looks like there's something wrong with the public key. The length of the key found is : {}".\
-                    format(self.signature_length * 8)
+                print "Looks like there's something wrong with the public key. The length of the key found is : {}". \
+                    format(self.rsaenc_length * 8)
                 sys.exit()
-
 
         elif self.type_of_operation is "decrypt":
             self.key_size = self.public_key.key_size
@@ -336,24 +335,24 @@ class pycrypt:
             self.rsaenc_length = self.private_key.key_size / 8
 
             if self.signature_length % 2 != 0 and self.signature_length > 0:
-                print "Looks like there's something wrong with the public key. The length of the key found is : {}".\
+                print "Looks like there's something wrong with the public key. The length of the key found is : {}". \
                     format(self.signature_length * 8)
                 sys.exit()
 
             if self.rsaenc_length % 2 != 0 and self.rsaenc_length > 0:
-                print "Looks like there's something wrong with the private key. The length of the key found is : {}".\
+                print "Looks like there's something wrong with the private key. The length of the key found is : {}". \
                     format(self.signature_length * 8)
                 sys.exit()
 
         else:
-            print "The file {} is not supported. Either you are using a weak key or something so strong that we don't "\
-                    "really have a need for that or some other file instead of a key.".format(self.key_size)
+            print "The file {} is not supported. Either you are using a weak key or something so strong that we don't " \
+                  "really have a need for that or some other file instead of a key.".format(self.key_size)
 
             sys.exit()
 
-
         self.aes_key = os.urandom(32)
         # print self.signature_length
+
 
 if __name__ == "__main__":
 
@@ -373,4 +372,3 @@ if __name__ == "__main__":
     elif options.decrypt:
         pycrypter = pycrypt(args[0], options.decrypt, args[1], args[2], options.filepath, "decrypt")
         pycrypter.decrypt_and_write()
-
