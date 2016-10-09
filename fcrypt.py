@@ -136,7 +136,7 @@ class pycrypt:
                 return serialization.load_pem_private_key(key_file.read(), password=None, backend=default_backend())
             except:
                 print "-" * 50
-                print "Could not load the pem private key file. Please Check."
+                print "Could not load the pem private key file. Please Check if the file is in PEM format."
                 sys.exit()
 
     # this function loads the public key. Opens the file and uses cryptography's serialization method to load the
@@ -147,12 +147,11 @@ class pycrypt:
                 return serialization.load_pem_public_key(key_file.read(), backend=default_backend())
             except:
                 print "-" * 50
-                print "Could not load the pem public key file. Please Check."
+                print "Could not load the pem public key file. Please Check if the file is in PEM format."
                 sys.exit()
 
     # this function performs the RSA encryption given the data (usually the symmetric key) to be encrypted.
     def rsa_encrypt(self, msg):
-
         try:
             ciphertext = self.public_key.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
                                                                    algorithm=hashes.SHA256(), label=None))
