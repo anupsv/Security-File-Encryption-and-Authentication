@@ -242,7 +242,12 @@ class pycrypt:
         # base 64 decoding the string
         print "-" * 50
         print "File data read successfully."
-        base64decoded = base64.decodestring(filedata)
+        try:
+            base64decoded = base64.decodestring(filedata)
+        except:
+            print "-" * 50
+            print "Base 64 decoding failed. Please check if the file is in base64 encoded."
+            sys.exit()
 
         # decrypting the data
         print "-" * 50
@@ -297,14 +302,14 @@ class pycrypt:
     # This function verifies if the given key files exist or not. Throws error and exists gracefully if not found.
     def verify_file_exists(self):
 
-        if not os.path.exists(self.pub_key_path):
-            print "Public Key file not found : {}".format(self.pub_key_path)
+        if not os.path.exists(self.pub_key_path) or not os.path.isfile(self.pub_key_path):
+            print "Public Key file not found or is a directory : {}".format(self.pub_key_path)
             sys.exit()
-        elif not os.path.exists(self.priv_key_path):
+        elif not os.path.exists(self.priv_key_path) or not os.path.isfile(self.priv_key_path) :
             print "Private Key file not found : {}".format(self.priv_key_path)
             sys.exit()
-        elif not os.path.exists(self.plain_or_crypt_data_path):
-            print "File to be encrypted not found : {}".format(self.plain_or_crypt_data_path)
+        elif not os.path.exists(self.plain_or_crypt_data_path) or not os.path.isfile(self.plain_or_crypt_data_path) :
+            print "File to be encrypted not found or is a directory : {}".format(self.plain_or_crypt_data_path)
             sys.exit()
 
     # identifies the key length and calculates the respective expected signature lengths
